@@ -195,7 +195,7 @@ Double-check these details in the code:
 
 **Phone Number:** +91 9279816626
 **Address:** 1st Floor, G Jeevan Drug Agency Building, Bihar Tokies Road ke Samne, Line Bazar, Purnea - 854301
-**Timings:** 9:00 AM - 8:00 PM (All Days)
+**Timings:** 9:00 AM - 7:00 PM (Monday to Saturday, Closed on Sunday)
 
 All information is stored in `/app/frontend/src/translations.js` and can be updated there.
 

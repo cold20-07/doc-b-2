@@ -1,7 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
@@ -15,18 +14,17 @@ import httpx
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# In-memory storage for appointments (temporary, until sent to Google Sheets)
+appointments_store = {}
+booked_slots = {}  # {date: [time1, time2, ...]}
 
 # Razorpay client (will use placeholder credentials from .env)
 razorpay_key_id = os.environ.get('RAZORPAY_KEY_ID', 'placeholder_key_id')
 razorpay_key_secret = os.environ.get('RAZORPAY_KEY_SECRET', 'placeholder_key_secret')
 razorpay_client = razorpay.Client(auth=(razorpay_key_id, razorpay_key_secret))
 
-# n8n webhook URL (placeholder)
-n8n_webhook_url = os.environ.get('N8N_WEBHOOK_URL', '')
+# Google Apps Script webhook URL
+google_webhook_url = os.environ.get('GOOGLE_WEBHOOK_URL', '')
 
 # Create the main app
 app = FastAPI()
@@ -76,20 +74,24 @@ async def root():
 async def get_available_slots(date: str):
     """
     Get available time slots for a specific date
-    Time: 9 AM - 8 PM, 20 min slots
+    Time: 9 AM - 7 PM, 20 min slots (Closed on Sunday)
     """
-    # Get booked appointments for the date
-    booked_appointments = await db.appointments.find(
-        {"appointment_date": date, "payment_status": "completed"},
-        {"_id": 0, "appointment_time": 1}
-    ).to_list(1000)
+    from datetime import datetime
     
-    booked_times = [apt["appointment_time"] for apt in booked_appointments]
+    # Parse the date to check if it's Sunday
+    date_obj = datetime.strptime(date, "%Y-%m-%d")
     
-    # Generate all possible slots (9 AM - 8 PM, 20 min intervals)
+    # Check if Sunday (weekday() returns 6 for Sunday)
+    if date_obj.weekday() == 6:
+        return {"available_slots": [], "message": "Clinic closed on Sunday"}
+    
+    # Get booked times from in-memory storage
+    booked_times = booked_slots.get(date, [])
+    
+    # Generate all possible slots (9 AM - 7 PM, 20 min intervals)
     all_slots = []
     start_hour = 9
-    end_hour = 20
+    end_hour = 19  # Changed from 20 to 19 (7 PM)
     
     for hour in range(start_hour, end_hour):
         for minute in [0, 20, 40]:
@@ -109,11 +111,9 @@ async def create_appointment(appointment: AppointmentCreate):
     appointment_dict = appointment.model_dump()
     appointment_obj = Appointment(**appointment_dict)
     
-    # Convert to dict for MongoDB
-    doc = appointment_obj.model_dump()
-    doc['created_at'] = doc['created_at'].isoformat()
+    # Store in memory temporarily
+    appointments_store[appointment_obj.id] = appointment_obj.model_dump()
     
-    await db.appointments.insert_one(doc)
     return appointment_obj
 
 @api_router.post("/create-payment-order")
@@ -133,11 +133,9 @@ async def create_payment_order(order: PaymentOrder):
                 "status": "created"
             }
             
-            # Update appointment with order ID
-            await db.appointments.update_one(
-                {"id": order.appointment_id},
-                {"$set": {"razorpay_order_id": mock_order["id"]}}
-            )
+            # Update appointment in memory
+            if order.appointment_id in appointments_store:
+                appointments_store[order.appointment_id]["razorpay_order_id"] = mock_order["id"]
             
             return mock_order
         else:
@@ -148,11 +146,9 @@ async def create_payment_order(order: PaymentOrder):
                 "payment_capture": 1
             })
             
-            # Update appointment with order ID
-            await db.appointments.update_one(
-                {"id": order.appointment_id},
-                {"$set": {"razorpay_order_id": razor_order["id"]}}
-            )
+            # Update appointment in memory
+            if order.appointment_id in appointments_store:
+                appointments_store[order.appointment_id]["razorpay_order_id"] = razor_order["id"]
             
             return razor_order
     except Exception as e:
@@ -162,7 +158,7 @@ async def create_payment_order(order: PaymentOrder):
 @api_router.post("/verify-payment")
 async def verify_payment(verification: PaymentVerification):
     """
-    Verify Razorpay payment and update appointment status
+    Verify Razorpay payment and send to Google Sheets
     """
     try:
         # For mock payments, just verify the format
@@ -179,40 +175,42 @@ async def verify_payment(verification: PaymentVerification):
             is_verified = razorpay_client.utility.verify_payment_signature(params_dict)
         
         if is_verified:
+            # Get appointment from memory
+            appointment = appointments_store.get(verification.appointment_id)
+            
+            if not appointment:
+                raise HTTPException(status_code=404, detail="Appointment not found")
+            
             # Update appointment as completed
-            result = await db.appointments.update_one(
-                {"id": verification.appointment_id},
-                {"$set": {
-                    "payment_status": "completed",
-                    "razorpay_payment_id": verification.razorpay_payment_id
-                }}
-            )
+            appointment["payment_status"] = "completed"
+            appointment["razorpay_payment_id"] = verification.razorpay_payment_id
             
-            # Get appointment details for n8n webhook
-            appointment = await db.appointments.find_one(
-                {"id": verification.appointment_id},
-                {"_id": 0}
-            )
+            # Mark slot as booked
+            date = appointment["appointment_date"]
+            time = appointment["appointment_time"]
+            if date not in booked_slots:
+                booked_slots[date] = []
+            booked_slots[date].append(time)
             
-            # Send to n8n webhook if configured
-            if n8n_webhook_url and appointment:
+            # Send to Google Apps Script webhook
+            if google_webhook_url:
                 try:
                     async with httpx.AsyncClient() as http_client:
-                        await http_client.post(
-                            n8n_webhook_url,
+                        response = await http_client.post(
+                            google_webhook_url,
                             json=appointment,
-                            timeout=10.0
+                            timeout=30.0
                         )
+                        logging.info(f"Google webhook response: {response.status_code}")
                 except Exception as webhook_error:
-                    logging.error(f"n8n webhook failed: {webhook_error}")
+                    logging.error(f"Google webhook failed: {webhook_error}")
+                    # Don't fail the payment if webhook fails
             
             return {"status": "success", "message": "Payment verified and appointment confirmed"}
         else:
             # Update as failed
-            await db.appointments.update_one(
-                {"id": verification.appointment_id},
-                {"$set": {"payment_status": "failed"}}
-            )
+            if verification.appointment_id in appointments_store:
+                appointments_store[verification.appointment_id]["payment_status"] = "failed"
             raise HTTPException(status_code=400, detail="Payment verification failed")
     
     except HTTPException:
@@ -221,32 +219,13 @@ async def verify_payment(verification: PaymentVerification):
         logging.error(f"Error verifying payment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/appointments", response_model=List[Appointment])
+@api_router.get("/appointments")
 async def get_appointments():
     """
     Get all appointments (for admin/doctor view)
     """
-    appointments = await db.appointments.find({}, {"_id": 0}).to_list(1000)
-    
-    for apt in appointments:
-        if isinstance(apt['created_at'], str):
-            apt['created_at'] = datetime.fromisoformat(apt['created_at'])
-    
-    return appointments
-
-@api_router.post("/n8n-webhook")
-async def n8n_webhook_endpoint(request: Request):
-    """
-    Placeholder endpoint for n8n to send data back
-    This can be configured later based on n8n workflow needs
-    """
-    try:
-        body = await request.json()
-        logging.info(f"Received n8n webhook: {body}")
-        return {"status": "received", "message": "Webhook data processed"}
-    except Exception as e:
-        logging.error(f"Error processing n8n webhook: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    appointments = list(appointments_store.values())
+    return {"appointments": appointments, "count": len(appointments)}
 
 # Include router
 app.include_router(api_router)
@@ -266,6 +245,4 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# No database cleanup needed

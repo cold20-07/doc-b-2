@@ -95,7 +95,7 @@ const Home = () => {
             <div className="relative animate-fade-in-right delay-200">
               <div className="glass-strong rounded-3xl p-8 shadow-2xl">
                 <img
-                  src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=600&h=700&fit=crop"
+                  src="https://i.ibb.co/67FQMjXC/Untitled-design-1.png"
                   alt="Dr. Sandeep Kumar"
                   className="rounded-2xl w-full object-cover shadow-lg"
                   data-testid="doctor-image"
@@ -131,8 +131,8 @@ const Home = () => {
             <div className="animate-fade-in-left">
               <div className="glass-strong rounded-3xl p-8 shadow-xl">
                 <img
-                  src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=600&h=500&fit=crop"
-                  alt="Clinic"
+                  src="https://i.ibb.co/N2sFXv6p/Untitled-design.png"
+                  alt="BL Uro-Stone & Kidney Clinic"
                   className="rounded-2xl w-full object-cover"
                   data-testid="clinic-image"
                 />

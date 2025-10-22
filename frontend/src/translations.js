@@ -7,7 +7,7 @@ export const translations = {
       description: "Specialized treatment for kidney stones, urological conditions, and endourology procedures. Providing advanced medical care with compassion and expertise in Purnea, Bihar.",
       bookNow: "Book Appointment",
       contact: "Contact Us",
-      timing: "9:00 AM - 8:00 PM (All Days)",
+      timing: "9:00 AM - 7:00 PM (Closed on Sunday)",
       experience: "Years Experience",
       patients: "Patients Treated"
     },
@@ -45,7 +45,7 @@ export const translations = {
       phoneTitle: "Phone & WhatsApp",
       whatsapp: "WhatsApp available for appointments",
       hoursTitle: "Clinic Hours",
-      hours: "9:00 AM - 8:00 PM (All Days Open)",
+      hours: "9:00 AM - 7:00 PM (Monday to Saturday)",
       cta: "Ready to Book?",
       bookButton: "Book Your Appointment"
     },
@@ -125,7 +125,7 @@ export const translations = {
       description: "किडनी स्टोन, यूरोलॉजिकल स्थितियों और एंडोयूरोलॉजी प्रक्रियाओं के लिए विशेष उपचार। पूर्णिया, बिहार में करुणा और विशेषज्ञता के साथ उन्नत चिकित्सा देखभाल प्रदान करना।",
       bookNow: "अपॉइंटमेंट बुक करें",
       contact: "संपर्क करें",
-      timing: "सुबह 9:00 - रात 8:00 (सभी दिन)",
+      timing: "सुबह 9:00 - शाम 7:00 (रविवार बंद)",
       experience: "वर्षों का अनुभव",
       patients: "मरीजों का इलाज"
     },

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: dr-sandeep-clinic-api
+    env: python
+    region: singapore
+    plan: free
+    buildCommand: cd backend && pip install -r requirements-simple.txt
+    startCommand: cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: RAZORPAY_KEY_ID
+        value: placeholder_key_id
+      - key: RAZORPAY_KEY_SECRET
+        value: placeholder_key_secret
+      - key: GOOGLE_WEBHOOK_URL
+        sync: false

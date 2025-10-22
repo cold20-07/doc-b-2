@@ -155,7 +155,7 @@ The website automatically sends appointment data to your n8n webhook after succe
 - **Specialization:** Urologist & Kidney Specialist
 - **Address:** 1st Floor, G Jeevan Drug Agency Building, Bihar Tokies Road ke Samne, Line Bazar, Purnea - 854301
 - **Phone/WhatsApp:** +91 9279816626
-- **Timings:** 9:00 AM - 8:00 PM (All Days Open)
+- **Timings:** 9:00 AM - 7:00 PM (Monday to Saturday, Closed on Sunday)
 - **Consultation Fee:** ₹500
 
 ### Qualifications:
