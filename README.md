@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # BL Uro-Stone & Kidney Clinic - Dr. Sandeep Kumar
 
 A modern, professional medical website with appointment booking system for Dr. Sandeep Kumar's urology and kidney stone clinic in Purnea, Bihar.
@@ -185,3 +186,6 @@ The application is containerized and ready for deployment. Key points:
 ---
 
 **Built with ❤️ by Emergent Agent**
+=======
+# doc-b-2
+>>>>>>> origin/main
