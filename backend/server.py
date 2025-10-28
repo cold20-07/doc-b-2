@@ -160,6 +160,11 @@ async def verify_payment(verification: PaymentVerification):
     """
     Verify Razorpay payment and send to Google Sheets
     """
+    logging.info(f"=== VERIFY PAYMENT CALLED ===")
+    logging.info(f"Appointment ID: {verification.appointment_id}")
+    logging.info(f"Order ID: {verification.razorpay_order_id}")
+    logging.info(f"Payment ID: {verification.razorpay_payment_id}")
+    
     try:
         # For mock payments, just verify the format
         if razorpay_key_id == 'placeholder_key_id':
@@ -185,6 +190,10 @@ async def verify_payment(verification: PaymentVerification):
             appointment["payment_status"] = "completed"
             appointment["razorpay_payment_id"] = verification.razorpay_payment_id
             
+            # Convert datetime to string for JSON serialization
+            if "created_at" in appointment and hasattr(appointment["created_at"], "isoformat"):
+                appointment["created_at"] = appointment["created_at"].isoformat()
+            
             # Mark slot as booked
             date = appointment["appointment_date"]
             time = appointment["appointment_time"]
@@ -193,18 +202,23 @@ async def verify_payment(verification: PaymentVerification):
             booked_slots[date].append(time)
             
             # Send to Google Apps Script webhook
+            logging.info(f"Google webhook URL: {google_webhook_url}")
             if google_webhook_url:
                 try:
-                    async with httpx.AsyncClient() as http_client:
+                    logging.info(f"Sending appointment data to Google: {appointment}")
+                    async with httpx.AsyncClient(follow_redirects=True) as http_client:
                         response = await http_client.post(
                             google_webhook_url,
                             json=appointment,
                             timeout=30.0
                         )
                         logging.info(f"Google webhook response: {response.status_code}")
+                        logging.info(f"Google webhook response body: {response.text}")
                 except Exception as webhook_error:
                     logging.error(f"Google webhook failed: {webhook_error}")
                     # Don't fail the payment if webhook fails
+            else:
+                logging.warning("Google webhook URL is not configured!")
             
             return {"status": "success", "message": "Payment verified and appointment confirmed"}
         else:
@@ -227,6 +241,42 @@ async def get_appointments():
     appointments = list(appointments_store.values())
     return {"appointments": appointments, "count": len(appointments)}
 
+@api_router.get("/test-webhook")
+async def test_webhook_endpoint():
+    """
+    Test endpoint to verify webhook configuration
+    """
+    test_data = {
+        "id": "test-endpoint-123",
+        "patient_name": "Test from API",
+        "patient_email": "test@example.com",
+        "patient_phone": "9876543210",
+        "appointment_date": "2025-10-25",
+        "appointment_time": "15:00",
+        "reason": "API test",
+        "payment_status": "completed",
+        "razorpay_payment_id": "pay_api_test"
+    }
+    
+    if not google_webhook_url:
+        return {"error": "Webhook URL not configured", "webhook_url": google_webhook_url}
+    
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as http_client:
+            response = await http_client.post(
+                google_webhook_url,
+                json=test_data,
+                timeout=30.0
+            )
+            return {
+                "status": "success",
+                "webhook_url": google_webhook_url,
+                "response_status": response.status_code,
+                "response_body": response.text
+            }
+    except Exception as e:
+        return {"error": str(e), "webhook_url": google_webhook_url}
+
 # Include router
 app.include_router(api_router)
 
@@ -241,7 +291,11 @@ app.add_middleware(
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('backend_debug.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
