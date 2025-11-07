@@ -2,8 +2,8 @@
 # This folder contains a production-ready build
 
 [build]
-  # No build command needed - already built
-  publish = "."
+  command = "npm run build"
+  publish = "build"
 
 [[redirects]]
   # SPA routing - redirect all routes to index.html
