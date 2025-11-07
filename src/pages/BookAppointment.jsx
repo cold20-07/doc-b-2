@@ -13,7 +13,8 @@ import axios from "axios";
 import { format } from "date-fns";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const WEBHOOK_URL = process.env.REACT_APP_GOOGLE_WEBHOOK_URL;
+const API = BACKEND_URL ? `${BACKEND_URL}/api` : WEBHOOK_URL;
 
 const BookAppointment = () => {
   const navigate = useNavigate();
@@ -40,7 +41,10 @@ const BookAppointment = () => {
     
     try {
       const formattedDate = format(date, "yyyy-MM-dd");
-      const response = await axios.get(`${API}/available-slots?date=${formattedDate}`);
+      const url = BACKEND_URL 
+        ? `${API}/available-slots?date=${formattedDate}`
+        : `${WEBHOOK_URL}?date=${formattedDate}`;
+      const response = await axios.get(url);
       setAvailableSlots(response.data.available_slots);
     } catch (error) {
       console.error("Error fetching slots:", error);
@@ -93,82 +97,87 @@ const BookAppointment = () => {
     setProcessing(true);
     
     try {
-      // Create appointment
+      const newAppointmentId = `apt_${Date.now()}`;
+      setAppointmentId(newAppointmentId);
+      
+      // Create appointment data
       const appointmentData = {
+        id: newAppointmentId,
         patient_name: formData.patient_name,
         patient_email: formData.patient_email,
         patient_phone: formData.patient_phone,
         appointment_date: format(selectedDate, "yyyy-MM-dd"),
         appointment_time: selectedTime,
-        reason: formData.reason || "General Consultation"
+        reason: formData.reason || "General Consultation",
+        payment_status: "pending"
       };
 
-      const appointmentResponse = await axios.post(`${API}/appointments`, appointmentData);
-      const newAppointmentId = appointmentResponse.data.id;
-      setAppointmentId(newAppointmentId);
-
-      // Create payment order (500 INR consultation fee)
-      const orderResponse = await axios.post(`${API}/create-payment-order`, {
-        amount: 50000, // 500 INR in paise
-        currency: "INR",
-        appointment_id: newAppointmentId
-      });
-
-      // Check if Razorpay credentials are configured
-      const razorpayKeyId = process.env.REACT_APP_RAZORPAY_KEY_ID || 'placeholder_key_id';
-      
-      if (razorpayKeyId === 'placeholder_key_id') {
-        // Mock payment success for testing
-        toast.success(t('booking.mockPayment'));
-        
-        // Simulate payment verification
-        await axios.post(`${API}/verify-payment`, {
-          razorpay_order_id: orderResponse.data.id,
-          razorpay_payment_id: `pay_mock_${Date.now()}`,
-          razorpay_signature: "mock_signature",
+      // Check if using backend or direct webhook
+      if (BACKEND_URL) {
+        // Backend flow (with Razorpay)
+        const appointmentResponse = await axios.post(`${API}/appointments`, appointmentData);
+        const orderResponse = await axios.post(`${API}/create-payment-order`, {
+          amount: 50000,
+          currency: "INR",
           appointment_id: newAppointmentId
         });
-
+        
+        const razorpayKeyId = process.env.REACT_APP_RAZORPAY_KEY_ID || 'placeholder_key_id';
+        
+        if (razorpayKeyId === 'placeholder_key_id') {
+          toast.success(t('booking.mockPayment'));
+          await axios.post(`${API}/verify-payment`, {
+            razorpay_order_id: orderResponse.data.id,
+            razorpay_payment_id: `pay_mock_${Date.now()}`,
+            razorpay_signature: "mock_signature",
+            appointment_id: newAppointmentId
+          });
+          toast.success(t('booking.success.title'));
+          setStep(4);
+        } else {
+          const options = {
+            key: razorpayKeyId,
+            amount: orderResponse.data.amount,
+            currency: orderResponse.data.currency,
+            name: "BL Uro-Stone & Kidney Clinic",
+            description: "Appointment Consultation Fee",
+            order_id: orderResponse.data.id,
+            handler: async (response) => {
+              try {
+                await axios.post(`${API}/verify-payment`, {
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  appointment_id: newAppointmentId
+                });
+                toast.success(t('booking.success.title'));
+                setStep(4);
+              } catch (error) {
+                console.error("Payment verification failed:", error);
+                toast.error(t('booking.errors.paymentFailed'));
+              }
+            },
+            prefill: {
+              name: formData.patient_name,
+              email: formData.patient_email,
+              contact: formData.patient_phone
+            },
+            theme: {
+              color: "#0ea5e9"
+            }
+          };
+          const razorpay = new window.Razorpay(options);
+          razorpay.open();
+        }
+      } else {
+        // Direct webhook flow (no payment, just save)
+        appointmentData.payment_status = "completed";
+        appointmentData.razorpay_payment_id = `pay_mock_${Date.now()}`;
+        
+        await axios.post(WEBHOOK_URL, appointmentData);
+        
         toast.success(t('booking.success.title'));
         setStep(4);
-      } else {
-        // Real Razorpay integration
-        const options = {
-          key: razorpayKeyId,
-          amount: orderResponse.data.amount,
-          currency: orderResponse.data.currency,
-          name: "BL Uro-Stone & Kidney Clinic",
-          description: "Appointment Consultation Fee",
-          order_id: orderResponse.data.id,
-          handler: async (response) => {
-            try {
-              // Verify payment
-              await axios.post(`${API}/verify-payment`, {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                appointment_id: newAppointmentId
-              });
-
-              toast.success(t('booking.success.title'));
-              setStep(4);
-            } catch (error) {
-              console.error("Payment verification failed:", error);
-              toast.error(t('booking.errors.paymentFailed'));
-            }
-          },
-          prefill: {
-            name: formData.patient_name,
-            email: formData.patient_email,
-            contact: formData.patient_phone
-          },
-          theme: {
-            color: "#0ea5e9"
-          }
-        };
-
-        const razorpay = new window.Razorpay(options);
-        razorpay.open();
       }
     } catch (error) {
       console.error("Error processing appointment:", error);
