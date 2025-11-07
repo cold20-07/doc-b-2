@@ -267,7 +267,7 @@ const BookAppointment = () => {
                       <Label className="text-base font-semibold mb-4 block">{t('booking.step1.selectTime')}</Label>
                       {loadingSlots ? (
                         <p className="text-sm text-gray-600">{t('booking.step1.loadingSlots')}</p>
-                      ) : availableSlots.length === 0 ? (
+                      ) : !availableSlots || availableSlots.length === 0 ? (
                         <p className="text-sm text-red-600" data-testid="no-slots-message">{t('booking.step1.noSlots')}</p>
                       ) : (
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3" data-testid="time-slots-grid">
