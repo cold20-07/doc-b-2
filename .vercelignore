@@ -3,3 +3,8 @@ node_modules
 .env.local
 build
 .git
+backend
+*.py
+requirements*.txt
+Pipfile*
+pyproject.toml
