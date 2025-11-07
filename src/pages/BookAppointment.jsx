@@ -115,7 +115,7 @@ const BookAppointment = () => {
       // Check if using backend or direct webhook
       if (BACKEND_URL) {
         // Backend flow (with Razorpay)
-        const appointmentResponse = await axios.post(`${API}/appointments`, appointmentData);
+        await axios.post(`${API}/appointments`, appointmentData);
         const orderResponse = await axios.post(`${API}/create-payment-order`, {
           amount: 50000,
           currency: "INR",
