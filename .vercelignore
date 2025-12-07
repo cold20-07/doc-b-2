@@ -1,0 +1,10 @@
+node_modules
+.env
+.env.local
+build
+.git
+backend
+*.py
+requirements*.txt
+Pipfile*
+pyproject.toml
